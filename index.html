@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Redirect automatico</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <p>Reindirizzamento in corso…</p>
+  <script>
+    const telegraphUrl = "https://telegra.ph/Link-Aggiornato-StreamingCommunity-09-29";
+
+    fetch(telegraphUrl)
+      .then(response => response.text())
+      .then(html => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        // Cerca il primo link presente nella pagina Telegra.ph
+        const a = doc.querySelector("a");
+        if (a && a.href) {
+          window.location.href = a.href;
+        } else {
+          document.body.innerText = "❌ Nessun link trovato nella pagina.";
+        }
+      })
+      .catch(error => {
+        console.error(error);
+        document.body.innerText = "⚠️ Errore nel recupero della pagina.";
+      });
+  </script>
+</body>
+</html>
