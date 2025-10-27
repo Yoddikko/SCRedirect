@@ -4,29 +4,61 @@
   <meta charset="UTF-8">
   <title>Redirect automatico</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: #0d1117;
+      color: #f0f6fc;
+      text-align: center;
+    }
+  </style>
 </head>
 <body>
-  <p>Reindirizzamento in corso…</p>
+  <div>
+    <p>⏳ Recupero link aggiornato…</p>
+    <p id="status"></p>
+  </div>
+
   <script>
     const telegraphUrl = "https://telegra.ph/Link-Aggiornato-StreamingCommunity-09-29";
+    const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(telegraphUrl);
 
-    fetch(telegraphUrl)
-      .then(response => response.text())
-      .then(html => {
+    fetch(proxyUrl)
+      .then(response => {
+        if (!response.ok) throw new Error("Errore nella risposta del proxy");
+        return response.json();
+      })
+      .then(data => {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
+        const doc = parser.parseFromString(data.contents, "text/html");
 
-        // Cerca il primo link presente nella pagina Telegra.ph
-        const a = doc.querySelector("a");
-        if (a && a.href) {
-          window.location.href = a.href;
+        // 1. Prova con un <a>
+        let link = doc.querySelector("a")?.href;
+
+        // 2. Se non trova nulla, cerca un URL nel testo
+        if (!link) {
+          const bodyText = doc.body.innerText;
+          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const match = bodyText.match(urlRegex);
+          if (match && match.length > 0) {
+            link = match[0];
+          }
+        }
+
+        if (link) {
+          document.getElementById("status").innerText = "🔁 Reindirizzamento in corso...";
+          window.location.href = link;
         } else {
-          document.body.innerText = "❌ Nessun link trovato nella pagina.";
+          document.getElementById("status").innerText = "❌ Nessun link trovato nella pagina.";
         }
       })
       .catch(error => {
-        console.error(error);
-        document.body.innerText = "⚠️ Errore nel recupero della pagina.";
+        console.error("Errore:", error);
+        document.getElementById("status").innerText = "⚠️ Errore nel recupero della pagina.";
       });
   </script>
 </body>
