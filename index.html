@@ -2,8 +2,9 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8">
-  <title> SCRedirect - Redirect automatico </title>
+  <title>SCRedirect - Redirect automatico</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <style>
     body {
       font-family: sans-serif;
@@ -36,10 +37,10 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(data.contents, "text/html");
 
-        // 1. Prova con un <a>
+        // 1️⃣ Cerca un link <a>
         let link = doc.querySelector("a")?.href;
 
-        // 2. Se non trova nulla, cerca un URL nel testo
+        // 2️⃣ Se non lo trova, cerca un URL nel testo
         if (!link) {
           const bodyText = doc.body.innerText;
           const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -49,6 +50,7 @@
           }
         }
 
+        // 3️⃣ Redirect o errore
         if (link) {
           document.getElementById("status").innerText = "🔁 Reindirizzamento in corso...";
           window.location.href = link;
