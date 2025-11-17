@@ -37,16 +37,31 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(data.contents, "text/html");
 
-        // 1️⃣ Cerca un link <a>
-        let link = doc.querySelector("a")?.href;
+        // 1️⃣ Cerca il primo link HTTP/HTTPS valido
+        const anchorLinks = Array.from(doc.querySelectorAll("a[href]"));
+        let link = anchorLinks
+          .map((a) => a.getAttribute("href") || "")
+          .find((href) => href.startsWith("http://") || href.startsWith("https://"));
+
+        // Normalizza e valida il link estratto
+        const normalizeLink = (candidate) => {
+          const trimmed = (candidate || "").trim();
+          try {
+            return new URL(trimmed).href;
+          } catch (e) {
+            return null;
+          }
+        };
+
+        link = normalizeLink(link);
 
         // 2️⃣ Se non lo trova, cerca un URL nel testo
         if (!link) {
           const bodyText = doc.body.innerText;
-          const urlRegex = /(https?:\/\/[^\s]+)/g;
+          const urlRegex = /(https?:\/\/[^\s"'>]+)/i;
           const match = bodyText.match(urlRegex);
           if (match && match.length > 0) {
-            link = match[0];
+            link = normalizeLink(match[0]);
           }
         }
 
