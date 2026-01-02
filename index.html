@@ -38,6 +38,7 @@
     const manualLinkEl = document.getElementById("manual-link");
     const blockedHosts = new Set(["telegra.ph", "telegram.org", "t.me", "edit.telegra.ph"]);
     const urlRegex = /https?:\/\/[^\s<>"']+/g;
+    const markdownLinkRegex = /\[[^\]]*?\]\((https?:\/\/[^\s<>"')]+)\)/g;
 
     const sources = [
       {
@@ -89,6 +90,11 @@
 
     function extractLinkFromText(text) {
       if (!text) return null;
+      const markdownMatches = text.matchAll(markdownLinkRegex);
+      for (const match of markdownMatches) {
+        const normalized = normalizeUrl(match[1], telegraphUrl);
+        if (normalized && isAllowedUrl(normalized)) return normalized;
+      }
       const matches = text.match(urlRegex) || [];
       for (const match of matches) {
         const normalized = normalizeUrl(match, telegraphUrl);
