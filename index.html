@@ -16,66 +16,148 @@
       color: #f0f6fc;
       text-align: center;
     }
+    a {
+      color: #58a6ff;
+    }
+    .manual-link {
+      margin-top: 12px;
+      font-size: 0.95rem;
+    }
   </style>
 </head>
 <body>
   <div>
     <p>⏳ Recupero link aggiornato…</p>
     <p id="status"></p>
+    <p id="manual-link" class="manual-link" hidden></p>
   </div>
 
   <script>
     const telegraphUrl = "https://telegra.ph/Link-Aggiornato-StreamingCommunity-09-29";
-    const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(telegraphUrl);
+    const statusEl = document.getElementById("status");
+    const manualLinkEl = document.getElementById("manual-link");
+    const blockedHosts = new Set(["telegra.ph", "telegram.org", "t.me", "edit.telegra.ph"]);
+    const urlRegex = /https?:\/\/[^\s<>"']+/g;
 
-    fetch(proxyUrl)
-      .then(response => {
-        if (!response.ok) throw new Error("Errore nella risposta del proxy");
-        return response.json();
-      })
-      .then(data => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(data.contents, "text/html");
+    const sources = [
+      {
+        name: "allorigins",
+        fetchText: async () => {
+          const proxyUrl = "https://api.allorigins.win/get?url=" + encodeURIComponent(telegraphUrl);
+          const response = await fetchWithTimeout(proxyUrl, {}, 10000);
+          if (!response.ok) throw new Error("Errore nella risposta di allorigins");
+          const data = await response.json();
+          return data.contents || "";
+        },
+      },
+      {
+        name: "jina",
+        fetchText: async () => {
+          const jinaUrl = "https://r.jina.ai/http://" + telegraphUrl.replace(/^https?:\/\//, "");
+          const response = await fetchWithTimeout(jinaUrl, {}, 10000);
+          if (!response.ok) throw new Error("Errore nella risposta di jina");
+          return response.text();
+        },
+      },
+    ];
 
-        // 1️⃣ Cerca il primo link HTTP/HTTPS valido
-        const anchorLinks = Array.from(doc.querySelectorAll("a[href]"));
-        let link = anchorLinks
-          .map((a) => a.getAttribute("href") || "")
-          .find((href) => href.startsWith("http://") || href.startsWith("https://"));
+    function showManualLink() {
+      manualLinkEl.innerHTML = `Se vuoi verificare manualmente: <a href="${telegraphUrl}" target="_blank" rel="noopener">${telegraphUrl}</a>`;
+      manualLinkEl.hidden = false;
+    }
 
-        // Normalizza e valida il link estratto
-        const normalizeLink = (candidate) => {
-          const trimmed = (candidate || "").trim();
-          try {
-            return new URL(trimmed).href;
-          } catch (e) {
-            return null;
-          }
-        };
+    function normalizeUrl(raw, baseUrl) {
+      if (!raw) return null;
+      const cleaned = raw.trim().replace(/[)\],.;!?]+$/, "");
+      try {
+        return new URL(cleaned, baseUrl).toString();
+      } catch {
+        return null;
+      }
+    }
 
-        link = normalizeLink(link);
+    function isAllowedUrl(url) {
+      try {
+        const parsed = new URL(url);
+        if (!["http:", "https:"].includes(parsed.protocol)) return false;
+        if (blockedHosts.has(parsed.hostname)) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    }
 
-        // 2️⃣ Se non lo trova, cerca un URL nel testo
-        if (!link) {
-          const bodyText = doc.body.innerText;
-          const urlRegex = /(https?:\/\/[^\s"'>]+)/i;
-          const match = bodyText.match(urlRegex);
-          if (match && match.length > 0) {
-            link = normalizeLink(match[0]);
-          }
+    function extractLinkFromText(text) {
+      if (!text) return null;
+      const matches = text.match(urlRegex) || [];
+      for (const match of matches) {
+        const normalized = normalizeUrl(match, telegraphUrl);
+        if (normalized && isAllowedUrl(normalized)) return normalized;
+      }
+      return null;
+    }
+
+    function extractLinkFromHtml(html) {
+      if (!html) return null;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+
+      const article = doc.querySelector(".tl_article_content") || doc.querySelector("article") || doc.body;
+      const anchors = article ? Array.from(article.querySelectorAll("a[href]")) : [];
+      for (const anchor of anchors) {
+        const href = normalizeUrl(anchor.getAttribute("href"), telegraphUrl);
+        if (href && isAllowedUrl(href)) return href;
+      }
+
+      const ogDesc = doc.querySelector('meta[property="og:description"]')?.getAttribute("content") || "";
+      const twDesc = doc.querySelector('meta[name="twitter:description"]')?.getAttribute("content") || "";
+      const metaLink = extractLinkFromText(`${ogDesc}\n${twDesc}`);
+      if (metaLink) return metaLink;
+
+      const bodyText = article?.innerText || doc.body?.innerText || "";
+      return extractLinkFromText(bodyText);
+    }
+
+    async function fetchWithTimeout(url, options, timeoutMs) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function findLatestLink() {
+      for (const source of sources) {
+        try {
+          statusEl.innerText = `🔎 Tentativo tramite ${source.name}...`;
+          const text = await source.fetchText();
+          const link = source.name === "allorigins"
+            ? extractLinkFromHtml(text)
+            : extractLinkFromText(text);
+          if (link) return { link, source: source.name };
+        } catch (error) {
+          console.warn(`Errore ${source.name}:`, error);
         }
+      }
+      return null;
+    }
 
-        // 3️⃣ Redirect o errore
-        if (link) {
-          document.getElementById("status").innerText = "🔁 Reindirizzamento in corso...";
-          window.location.href = link;
+    findLatestLink()
+      .then(result => {
+        if (result?.link) {
+          statusEl.innerText = "🔁 Reindirizzamento in corso...";
+          window.location.replace(result.link);
         } else {
-          document.getElementById("status").innerText = "❌ Nessun link trovato nella pagina.";
+          statusEl.innerText = "❌ Nessun link trovato nella pagina.";
+          showManualLink();
         }
       })
       .catch(error => {
         console.error("Errore:", error);
-        document.getElementById("status").innerText = "⚠️ Errore nel recupero della pagina.";
+        statusEl.innerText = "⚠️ Errore nel recupero della pagina.";
+        showManualLink();
       });
   </script>
 </body>
